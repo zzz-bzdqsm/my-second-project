@@ -1,6 +1,6 @@
-# 预约挂号平台系统（校招 MVP）
+# 预约挂号平台系统
 
-一个适合校招展示的“预约挂号平台”后端项目，覆盖常见面试能力点：**Spring Boot + MyBatis + MySQL + Redis + JWT**，并提供一个静态页面用于演示联调。
+“预约挂号平台”后端项目，覆盖常见面试能力点：**Spring Boot + MyBatis + MySQL + Redis + JWT**，并提供一个静态页面用于演示联调。
 
 ## 功能
 - **用户注册/登录（JWT）**：登录后返回 token；预约相关接口需要携带 `Authorization: Bearer <token>`
@@ -42,7 +42,7 @@
 mvn spring-boot:run
 ```
 
-默认端口是 **8081**（避免与你另一个项目 8080 冲突）。启动后：
+默认端口是 **8081**（避免与另一个项目 8080 冲突）。启动后：
 - 演示页面：`http://localhost:8081/`
 - Swagger：`http://localhost:8081/swagger-ui.html`
 
@@ -64,7 +64,7 @@ mvn spring-boot:run
 - `GET /api/appointments/my?limit=50`
 - `POST /api/appointments/{id}/cancel`
 
-## 并发防超卖的实现说明（面试可讲）
+## 并发防超卖的实现说明
 创建预约时使用单条 SQL 原子扣减：\n
 ```sql
 UPDATE doctor_schedule
