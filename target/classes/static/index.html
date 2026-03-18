@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>预约挂号平台系统（演示版）</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Microsoft YaHei", Arial, sans-serif; margin: 0; background: #f6f7fb; }
+    header { padding: 16px 20px; background: #111827; color: #fff; }
+    main { padding: 20px; max-width: 1100px; margin: 0 auto; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .card { background: #fff; border-radius: 12px; padding: 14px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+    h2 { margin: 0 0 10px; font-size: 16px; }
+    label { display: block; font-size: 12px; color: #374151; margin: 10px 0 6px; }
+    input, select, button { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #e5e7eb; font-size: 14px; box-sizing: border-box; }
+    button { background: #2563eb; border: none; color: #fff; cursor: pointer; }
+    button:disabled { background: #9ca3af; cursor: not-allowed; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .muted { color: #6b7280; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 8px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
+    th { color: #374151; font-weight: 600; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #eef2ff; color: #3730a3; font-size: 12px; }
+    .ok { background: #ecfdf5; color: #065f46; }
+    .warn { background: #fffbeb; color: #92400e; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<header>
+  <div style="font-size:18px;font-weight:700;">预约挂号平台系统（演示版）</div>
+  <div class="muted">后端：Spring Boot + MyBatis + MySQL + Redis + JWT；前端：静态页面（无 Node）。</div>
+</header>
+
+<main>
+  <div class="grid">
+    <section class="card">
+      <h2>注册 / 登录</h2>
+      <div class="muted">登录成功后会把 token 存在 <span class="mono">localStorage</span>，并用于预约相关接口。</div>
+
+      <div class="row" style="margin-top:10px;">
+        <div>
+          <label>用户名</label>
+          <input id="username" placeholder="例如: test001" />
+        </div>
+        <div>
+          <label>密码</label>
+          <input id="password" type="password" placeholder="至少 6 位" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>手机号（注册可选）</label>
+          <input id="phone" placeholder="可不填" />
+        </div>
+        <div>
+          <label>当前登录用户</label>
+          <input id="me" disabled />
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button id="btnRegister">注册</button>
+        <button id="btnLogin" style="background:#059669;">登录</button>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button id="btnLogout" style="background:#6b7280;">退出登录</button>
+        <button id="btnRefreshMe">刷新 /me</button>
+      </div>
+      <div id="authHint" class="muted" style="margin-top:10px;"></div>
+    </section>
+
+    <section class="card">
+      <h2>医生列表</h2>
+      <div class="muted">接口：<span class="mono">GET /api/doctors</span> / <span class="mono">GET /api/doctors/depts</span></div>
+
+      <div class="row" style="margin-top:10px;">
+        <div>
+          <label>科室</label>
+          <select id="deptSelect"></select>
+        </div>
+        <div>
+          <label>搜索（姓名/简介）</label>
+          <input id="q" placeholder="例如: 擅长" />
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button id="btnLoadDoctors">刷新医生</button>
+        <button id="btnPickToday" style="background:#111827;">今天</button>
+      </div>
+
+      <div style="margin-top:10px; overflow:auto;">
+        <table id="doctorsTable">
+          <thead>
+          <tr>
+            <th>ID</th>
+            <th>姓名</th>
+            <th>科室</th>
+            <th>职称</th>
+            <th>操作</th>
+          </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <section class="card" style="margin-top:16px;">
+    <h2>排班与预约</h2>
+    <div class="muted">
+      - 排班查询：<span class="mono">GET /api/schedules?doctorId=&date=YYYY-MM-DD</span>（带 Redis 缓存）<br/>
+      - 创建预约：<span class="mono">POST /api/appointments</span>（需要 token，含防超卖原子扣减）<br/>
+    </div>
+
+    <div class="row" style="margin-top:10px;">
+      <div>
+        <label>选中的医生 ID</label>
+        <input id="selectedDoctorId" disabled />
+      </div>
+      <div>
+        <label>日期</label>
+        <input id="date" type="date" />
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <button id="btnLoadSchedules">查询排班</button>
+      <button id="btnReloadMy" style="background:#111827;">刷新我的预约</button>
+    </div>
+
+    <div style="margin-top:10px; overflow:auto;">
+      <table id="scheduleTable">
+        <thead>
+        <tr>
+          <th>scheduleId</th>
+          <th>timeSlot</th>
+          <th>total</th>
+          <th>available</th>
+          <th>操作</th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div id="scheduleHint" class="muted" style="margin-top:10px;"></div>
+  </section>
+
+  <section class="card" style="margin-top:16px;">
+    <h2>我的预约</h2>
+    <div class="muted">接口：<span class="mono">GET /api/appointments/my</span>，取消：<span class="mono">POST /api/appointments/{id}/cancel</span></div>
+    <div style="margin-top:10px; overflow:auto;">
+      <table id="myTable">
+        <thead>
+        <tr>
+          <th>appointmentId</th>
+          <th>doctorId</th>
+          <th>scheduleId</th>
+          <th>status</th>
+          <th>createdAt</th>
+          <th>操作</th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div id="myHint" class="muted" style="margin-top:10px;"></div>
+  </section>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  function getToken() {
+    return localStorage.getItem("token") || "";
+  }
+  function setToken(token) {
+    localStorage.setItem("token", token);
+  }
+  function clearToken() {
+    localStorage.removeItem("token");
+  }
+
+  async function api(path, options = {}) {
+    const headers = options.headers || {};
+    const token = getToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    if (options.json) {
+      headers["Content-Type"] = "application/json;charset=UTF-8";
+      options.body = JSON.stringify(options.json);
+    }
+    const res = await fetch(path, { ...options, headers });
+    const text = await res.text();
+    let obj = null;
+    try { obj = JSON.parse(text); } catch (_) {}
+    if (!res.ok) throw new Error(text);
+    if (obj && typeof obj.code === "number") {
+      if (obj.code !== 0) throw new Error(obj.message || "请求失败");
+      return obj.data;
+    }
+    return obj;
+  }
+
+  function fmt(t) {
+    if (!t) return "";
+    // 后端返回的是 ISO Instant 字符串或 null（由 Jackson 序列化）
+    try { return new Date(t).toLocaleString(); } catch { return String(t); }
+  }
+
+  async function refreshMe() {
+    try {
+      const me = await api("/api/auth/me");
+      $("me").value = `${me.username} (id=${me.id})`;
+      $("authHint").textContent = "已登录。";
+    } catch (e) {
+      $("me").value = "";
+      $("authHint").textContent = "未登录或 token 无效。";
+    }
+  }
+
+  async function loadDepts() {
+    const data = await api("/api/doctors/depts");
+    const items = data.items || [];
+    const sel = $("deptSelect");
+    sel.innerHTML = "";
+    const all = document.createElement("option");
+    all.value = "";
+    all.textContent = "全部科室";
+    sel.appendChild(all);
+    items.forEach(d => {
+      const opt = document.createElement("option");
+      opt.value = d;
+      opt.textContent = d;
+      sel.appendChild(opt);
+    });
+  }
+
+  async function loadDoctors() {
+    const dept = $("deptSelect").value;
+    const q = $("q").value.trim();
+    const list = await api(`/api/doctors?dept=${encodeURIComponent(dept)}&q=${encodeURIComponent(q)}&page=1&size=20`);
+    const tbody = $("doctorsTable").querySelector("tbody");
+    tbody.innerHTML = "";
+    list.forEach(d => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${d.id}</td>
+        <td>${d.name}</td>
+        <td>${d.dept}</td>
+        <td>${d.title ?? ""}</td>
+        <td><button data-id="${d.id}" style="background:#111827;">选择</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll("button[data-id]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        $("selectedDoctorId").value = btn.getAttribute("data-id");
+        $("scheduleHint").textContent = "已选择医生，点击“查询排班”。";
+      });
+    });
+  }
+
+  async function loadSchedules() {
+    const doctorId = $("selectedDoctorId").value;
+    const date = $("date").value;
+    if (!doctorId) return alert("请先在医生列表里选择一个医生");
+    if (!date) return alert("请选择日期");
+    const list = await api(`/api/schedules?doctorId=${encodeURIComponent(doctorId)}&date=${encodeURIComponent(date)}`);
+    const tbody = $("scheduleTable").querySelector("tbody");
+    tbody.innerHTML = "";
+    list.forEach(s => {
+      const tr = document.createElement("tr");
+      const canBook = Number(s.availableQuota) > 0;
+      tr.innerHTML = `
+        <td>${s.id}</td>
+        <td><span class="pill">${s.timeSlot}</span></td>
+        <td>${s.totalQuota}</td>
+        <td><span class="pill ${canBook ? "ok" : "warn"}">${s.availableQuota}</span></td>
+        <td><button data-sid="${s.id}" ${canBook ? "" : "disabled"} style="background:#059669;">预约</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll("button[data-sid]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const sid = Number(btn.getAttribute("data-sid"));
+        try {
+          await api("/api/appointments", { method: "POST", json: { scheduleId: sid } });
+          $("scheduleHint").textContent = "预约成功（已提交）。刷新排班/我的预约查看结果。";
+          await Promise.all([loadSchedules(), loadMy()]);
+        } catch (e) {
+          alert("预约失败：" + (e?.message ?? String(e)));
+        }
+      });
+    });
+  }
+
+  async function loadMy() {
+    const tbody = $("myTable").querySelector("tbody");
+    tbody.innerHTML = "";
+    try {
+      const list = await api("/api/appointments/my?limit=50");
+      list.forEach(a => {
+        const tr = document.createElement("tr");
+        const booked = a.status === "BOOKED";
+        tr.innerHTML = `
+          <td>${a.id}</td>
+          <td>${a.doctorId}</td>
+          <td>${a.scheduleId}</td>
+          <td><span class="pill ${booked ? "ok" : ""}">${a.status}</span></td>
+          <td>${fmt(a.createdAt)}</td>
+          <td><button data-aid="${a.id}" ${booked ? "" : "disabled"} style="background:#dc2626;">取消</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+      tbody.querySelectorAll("button[data-aid]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const id = Number(btn.getAttribute("data-aid"));
+          if (!confirm("确定取消该预约吗？")) return;
+          try {
+            await api(`/api/appointments/${id}/cancel`, { method: "POST" });
+            await Promise.all([loadSchedules().catch(() => {}), loadMy()]);
+          } catch (e) {
+            alert("取消失败：" + (e?.message ?? String(e)));
+          }
+        });
+      });
+      $("myHint").textContent = `共 ${list.length} 条（只展示最近 50 条）。`;
+    } catch (e) {
+      $("myHint").textContent = "未登录或 token 无效，无法查看。";
+    }
+  }
+
+  function setToday() {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    $("date").value = `${yyyy}-${mm}-${dd}`;
+  }
+
+  $("btnRegister").addEventListener("click", async () => {
+    try {
+      await api("/api/auth/register", {
+        method: "POST",
+        json: {
+          username: $("username").value,
+          password: $("password").value,
+          phone: $("phone").value
+        }
+      });
+      $("authHint").textContent = "注册成功，请点击登录。";
+    } catch (e) {
+      alert("注册失败：" + (e?.message ?? String(e)));
+    }
+  });
+
+  $("btnLogin").addEventListener("click", async () => {
+    try {
+      const data = await api("/api/auth/login", {
+        method: "POST",
+        json: {
+          username: $("username").value,
+          password: $("password").value
+        }
+      });
+      setToken(data.token);
+      await refreshMe();
+      await loadMy();
+    } catch (e) {
+      alert("登录失败：" + (e?.message ?? String(e)));
+    }
+  });
+
+  $("btnLogout").addEventListener("click", async () => {
+    clearToken();
+    await refreshMe();
+    await loadMy();
+  });
+
+  $("btnRefreshMe").addEventListener("click", refreshMe);
+  $("btnLoadDoctors").addEventListener("click", () => loadDoctors().catch(alert));
+  $("btnLoadSchedules").addEventListener("click", () => loadSchedules().catch(alert));
+  $("btnReloadMy").addEventListener("click", () => loadMy().catch(alert));
+  $("btnPickToday").addEventListener("click", () => { setToday(); });
+
+  async function init() {
+    setToday();
+    await refreshMe();
+    await loadDepts();
+    await loadDoctors();
+    await loadMy();
+  }
+
+  init().catch(e => {
+    $("authHint").textContent = "初始化失败：" + (e?.message ?? String(e));
+  });
+</script>
+</body>
+</html>
+
