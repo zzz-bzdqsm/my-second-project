@@ -13,7 +13,7 @@
 
 ## 技术栈
 - Java 17
-- Spring Boot 3.x
+- Spring Boot 3.4.4
 - MyBatis（注解 SQL）
 - MySQL
 - Redis
